@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import pika
 from DBcm import UseDatabase, ConnectError, CredentialsError, SQLError
 
 
@@ -104,6 +105,55 @@ class Lenta:
         #     if lmaxWrack >= self.dMin or rmaxWrack >= self.dMin:
         #         self.listWract.append(tempDict)
         print('Деление на блоки завершено')
+    
+    def find_loop(self, inputData):
+        distance = 0
+        if self.findStartLoop == False:
+            for i in inputData:
+                if inputData[i]['marker']:
+                    self.findStartLoop = True
+                    self.iStart = i
+                    self.iStartSet = len(self.listAllCadr)-1
+                    break
+        else:
+            for i in inputData:
+                if inputData[i]['marker'] and self.findLoop == False:
+                    print('Круг построен')
+                    self.iEnd = i
+                    self.iEndSet = len(self.listAllCadr)-1
+                    self.findLoop = True
+                    self.listCadr.append(self.listAllCadr[self.iStartSet][self.iStart])
+                    self.listCadr[0]['distance'] = distance
+
+                    for iSet in range(self.iStartSet, self.iEndSet+1):
+                        if iSet == self.iStartSet:
+                            for iCadr in list(self.listAllCadr[iSet].keys())[self.iStart+1:]:
+                                self.listCadr.append(self.listAllCadr[iSet][iCadr])
+                                self.listCadr[-1]['distance'] = distance + self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
+                                distance += self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
+                        else:
+                            for iCadr in self.listAllCadr[iSet]:
+                                self.listCadr.append(self.listAllCadr[iSet][iCadr])
+                                self.listCadr[-1]['distance'] = distance + self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
+                                distance += self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
+
+                                if self.listCadr[-1]['marker']:
+                                    self.lenghtLenta = self.listCadr[-1]['distance']
+                                    print('Круг записан')
+                                    self.division_blocks()
+
+                                    distance = 0
+                                    self.listNewCadr.append(self.listAllCadr[iSet][iCadr].copy())
+                                    self.listNewCadr[-1]['distance'] = distance
+
+                                    for iCadrLeft in list(self.listAllCadr[iSet].keys())[iCadr+1:]:
+                                        self.listNewCadr.append(self.listAllCadr[iSet][iCadrLeft])
+                                        self.listNewCadr[-1]['distance'] = distance + self.listAllCadr[iSet][iCadrLeft]['speed'] * self.FPS
+                                        distance += self.listAllCadr[iSet][iCadrLeft]['speed'] * self.FPS
+                                    print('Остальные кадры записаны в listNewCadr')
+                                    self.listAllCadr.clear()
+                                    break
+                    break
 
     def callback(self, body) -> None:
         """Метод сбора данных из пакета пришедшего с RabbitMQ.
@@ -113,15 +163,20 @@ class Lenta:
         self.listAllCadr.append(inputData)
         if self.findLoop:
             print('*')
-            # distance = self.listNewCadr[-1]['distance']
-            # iBlock = 1
-            # for iCadr in range(len(self.listNewCadr)):
-            #     if self.listNewCadr[iCadr]['distance'] >= self.lenghtBlock * iBlock:
-            #         print('Новый блок!')
-            #         self.listNewBlocks.append(self.listNewCadr[:iCadr])
-            #         iBlock += 1
-            #         break
-            # print(self.listNewBlocks)
+            if self.listNewCadr:
+                distance = self.listNewCadr[-1]['distance']
+            else:
+                distance = 0
+
+            iBlock = 1
+            for iCadr in range(len(self.listNewCadr)):
+                if self.listNewCadr[iCadr]['distance'] >= self.lenghtBlock * iBlock:
+                    print('Новый блок!')
+                    self.listNewBlocks.append(self.listNewCadr[:iCadr])
+                    iBlock += 1
+                    break
+                
+            print(self.listNewBlocks)
             # for iCadr in inputData:
             #     print(inputData[iCadr])
             #     self.listNewCadr.append(inputData[iCadr])
@@ -153,89 +208,31 @@ class Lenta:
             #     self.listNewCadr.clear()
 
             
-                # if self.listNewCadr[-1]['distance'] >= self.lenghtBlock:
-                #     print('Создан новый блок', self.listNewCadr)
-                #     self.listNewBlocks.append(self.listNewCadr.copy())
+            #     if self.listNewCadr[-1]['distance'] >= self.lenghtBlock:
+            #         print('Создан новый блок', self.listNewCadr)
+            #         self.listNewBlocks.append(self.listNewCadr.copy())
 
-                # if inputData[iCadr]['marker']:
-                #     print('Повторение круга')
-                #     self.iEnd = iCadr
-                #     self.iEndSet = len(self.listAllCadr)-1
-                #     break
+            #     if inputData[iCadr]['marker']:
+            #         print('Повторение круга')
+            #         self.iEnd = iCadr
+            #         self.iEndSet = len(self.listAllCadr)-1
+            #         break
 
-                #     for iSet in range(self.iEndSet+1):
-                #         for iCadr in self.listAllCadr[iSet]:
-                #             self.listNewCadr.append(self.listAllCadr[iSet][iCadr])
-                #             self.listNewCadr[-1]['distance'] = distance + \
-                #                 self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
-                #             distance += self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
+            #         for iSet in range(self.iEndSet+1):
+            #             for iCadr in self.listAllCadr[iSet]:
+            #                 self.listNewCadr.append(self.listAllCadr[iSet][iCadr])
+            #                 self.listNewCadr[-1]['distance'] = distance + \
+            #                     self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
+            #                 distance += self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
 
-                #             if self.listNewCadr[-1]['marker']:
-                #                 self.lenghtLenta = self.listNewCadr[-1]['distance']
-                #                 print('Круг записан')
-                #                 break
+            #                 if self.listNewCadr[-1]['marker']:
+            #                     self.lenghtLenta = self.listNewCadr[-1]['distance']
+            #                     print('Круг записан')
+            #                     break
 
         else:
-            distance = 0
-            if self.findStartLoop == False:
-                for i in inputData:
-                    if inputData[i]['marker']:
-                        self.findStartLoop = True
-                        self.iStart = i
-                        self.iStartSet = len(self.listAllCadr)-1
-                        break
-            else:
-                for i in inputData:
-                    if inputData[i]['marker'] and self.findLoop == False:
-                        print('Круг построен')
-                        self.iEnd = i
-                        self.iEndSet = len(self.listAllCadr)-1
-                        self.findLoop = True
-                        self.listCadr.append(self.listAllCadr[self.iStartSet][self.iStart])
-                        self.listCadr[0]['distance'] = distance
-
-                        for iSet in range(self.iStartSet, self.iEndSet+1):
-                            if iSet == self.iStartSet:
-                                for iCadr in list(self.listAllCadr[iSet].keys())[self.iStart+1:]:
-                                    self.listCadr.append(self.listAllCadr[iSet][iCadr])
-                                    self.listCadr[-1]['distance'] = distance + self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
-                                    distance += self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
-                            else:
-                                for iCadr in self.listAllCadr[iSet]:
-                                    self.listCadr.append(self.listAllCadr[iSet][iCadr])
-                                    self.listCadr[-1]['distance'] = distance + self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
-                                    distance += self.listAllCadr[iSet][iCadr]['speed'] * self.FPS
-
-                                    if self.listCadr[-1]['marker']:
-                                        self.lenghtLenta = self.listCadr[-1]['distance']
-                                        print('Круг записан')
-                                        self.division_blocks()
-
-                                        distance = 0
-                                        self.listNewCadr.append(self.listAllCadr[iSet][iCadr].copy())
-                                        self.listNewCadr[-1]['distance'] = distance
-
-                                        iBlock = 1
-                                        iStarBlock = 0
-                                        for iCadrLeft in list(self.listAllCadr[iSet].keys())[iCadr+1:]:
-                                            self.listNewCadr.append(self.listAllCadr[iSet][iCadrLeft])
-                                            self.listNewCadr[-1]['distance'] = distance + self.listAllCadr[iSet][iCadrLeft]['speed'] * self.FPS
-                                            distance += self.listAllCadr[iSet][iCadrLeft]['speed'] * self.FPS
-                                            if distance >= self.lenghtBlock * iBlock:
-                                                print('Новый блок!')
-                                                self.listNewBlocks.append(self.listNewCadr[iStarBlock:iCadrLeft])
-                                                iStarBlock = iCadrLeft
-                                                iBlock += 1
-                                        print('Остальные кадры записаны в listNewCadr')
-                                        self.listAllCadr.clear()
-                                        break
-                        break
-                # if self.findLoop:
-                #     self.division_blocks()
-
-    # def create_block(self, cadr):
-    #     print(cadr)
-
+            self.find_loop(inputData)
+            
 
 
 DBCONFIG = {'host': '192.168.1.254',
