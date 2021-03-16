@@ -234,11 +234,11 @@ class Lenta:
             self.find_loop(inputData)
             
 
-
 DBCONFIG = {'host': '192.168.1.254',
             'user': 'user2',
             'password': '0011',
             'database': 'videoai', }
+
 
 cs = int(input("Количество блоков: "))
 lenta = Lenta(DBCONFIG, 15, cs, 7)
