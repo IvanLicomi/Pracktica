@@ -88,20 +88,19 @@ class Lenta:
         else:
             return CurrentData
 
-    def division_blocks(self):
+    def division_blocks(self, listCadr, listBlocks):
         """Метод делит ленту на блоки равного размера."""
         print('[*] - деление на блоки')
+        iBlock = self.iCurrentBlock
         tempList = list()
-        self.lenghtBlock = self.lenghtLenta / self.countBlock
-        iBlock = 1
-        for cadr in self.listCadr:
+        for cadr in listCadr:
             if cadr['distance'] < self.lenghtBlock * iBlock:
                 tempList.append(cadr)
 
             elif cadr['distance'] == self.lenghtBlock * iBlock:
                 tempList.append(cadr)
                 joint = tempList[-1]
-                self.listBlocks.append(Block(self.iCurrentBlock, tempList[0]['distance'], self.lenghtBlock * iBlock, tempList))
+                listBlocks.append(Block(self.iCurrentBlock, tempList[0]['distance'], self.lenghtBlock * iBlock, tempList))
                 self.iCurrentBlock += 1
                 tempList.clear()
                 tempList.append(joint)
@@ -110,36 +109,14 @@ class Lenta:
             else:
                 joint = tempList[-1]
                 joint['distance'] = iBlock * self.lenghtBlock
-                self.listBlocks.append(Block(self.iCurrentBlock, tempList[0]['distance'], self.lenghtBlock * iBlock, tempList))
+                listBlocks.append(Block(self.iCurrentBlock, tempList[0]['distance'], self.lenghtBlock * iBlock, tempList))
                 self.iCurrentBlock += 1
                 tempList.clear()
                 tempList.append(joint)
                 tempList.append(cadr)
                 iBlock += 1
-        self.iCurrentBlock = 0       
-        # for iBlock in range(len(self.listBlocks)):
-        #     tempDict = dict()
-        #     lmaxWrack = 0
-        #     rmaxWrack = 0
-
-        #     for cadr in self.listBlocks[iBlock]:
-        #         if cadr['lmax'] - cadr['lmin'] >= lmaxWrack:
-        #             lmaxWrack = cadr['lmax'] - cadr['lmin']
-        #             tempDict['wrack'] = lmaxWrack
-        #             tempDict['distance'] = cadr['distance']
-        #             tempDict['side'] = 'left'
-        #             tempDict['index'] = iBlock
-
-        #         if cadr['rmax'] - cadr['rmin'] >= rmaxWrack:
-        #             rmaxWrack = cadr['rmax'] - cadr['rmin']
-        #             tempDict['wrack'] = rmaxWrack
-        #             tempDict['distance'] = cadr['distance']
-        #             tempDict['side'] = 'right'
-        #             tempDict['index'] = iBlock
-
-        #     if lmaxWrack >= self.dMin or rmaxWrack >= self.dMin:
-        #         self.listWract.append(tempDict)
         print('[*] - деление на блоки завершено')
+        return tempList.copy()
     
     def find_loop(self, inputData):
         distance = 0
@@ -175,7 +152,9 @@ class Lenta:
 
                                 if self.listCadr[-1]['marker']:
                                     self.lenghtLenta = self.listCadr[-1]['distance']
-                                    self.division_blocks()
+                                    self.lenghtBlock = self.lenghtLenta / self.countBlock
+                                    self.division_blocks(self.listCadr, self.listBlocks)
+                                    self.iCurrentBlock = 0
 
                                     distance = 0
                                     self.listNewCadr.append(self.listAllCadr[iSet][iCadr].copy())
@@ -195,60 +174,47 @@ class Lenta:
         """Метод сбора данных из пакета пришедшего с RabbitMQ.
            Данные должны приходить в формате JSON.
         """
-        if self.findLoop:
+        if self.findLoop: # Если полный оборот построен, то обрабатываем данные для последующего сравнения
             print('[*] - запуск главного процесса')
-            if self.listNewCadr and not self.checkNewCadr: # Обработка оставшихся кадров в наборе (создание или наполнение блока), если они есть и не было обработки.
+            if self.listNewCadr and not self.checkNewCadr: # Обработка оставшихся кадров после постоения оборота, если они есть и не было обработки.
                 print('[*] - обработка оставшихся кадров')
-                iBlock = 1
-                tempList = list()
-                for iCadr in range(len(self.listNewCadr)):
-                    if self.listNewCadr[iCadr]['distance'] < self.lenghtBlock * iBlock:
-                        tempList.append(self.listNewCadr[iCadr])
-
-                    elif self.listNewCadr[iCadr]['distance'] == self.lenghtBlock * iBlock:
-                        tempList.append(self.listNewCadr[iCadr])
-                        joint = tempList[-1]
-                        self.listNewBlocks.append(Block(self.iCurrentBlock, tempList[0]['distance'], self.lenghtBlock * iBlock, tempList))
-                        tempList.clear()
-                        tempList.append(joint)
-                        iBlock += 1
-
-                    else:
-                        joint = tempList[-1]
-                        joint['distance'] = iBlock * self.lenghtBlock
-                        self.listNewBlocks.append(Block(self.iCurrentBlock, tempList[0]['distance'], self.lenghtBlock * iBlock, tempList))
-                        self.iCurrentBlock += 1
-                        tempList.clear()
-                        tempList.append(joint)
-                        tempList.append(self.listNewCadr[iCadr])
-                        iBlock += 1
-
-                self.listNewCadr = tempList.copy()
+                self.listNewCadr = self.division_blocks(self.listNewCadr, self.listNewBlocks)
                 self.checkNewCadr = True
-
                 if self.listNewBlocks:
                     self.comparison_bloks()
-                else:
-                    self.callback(body)
             else:
-                print('[*] - a')
+                print('[*] - сбор данных')
                 inputData = eval(body)
-                for i in inputData:
-                    print(inputData[i])
-                print('*'*100)
 
-        else:
+                if self.listNewCadr:
+                    distance = self.listNewCadr[-1]['distance']
+                else:
+                    distance = 0
+
+                for i in inputData:
+                    self.listNewCadr.append(inputData[i])
+                    self.listNewCadr[-1]['distance'] = distance + inputData[i]['speed'] * self.FPS
+                    distance += inputData[i]['speed'] * self.FPS
+                    if self.listNewCadr[-1]['distance'] >= self.lenghtBlock * len(self.listNewBlocks):
+                        self.listNewCadr = self.division_blocks(self.listNewCadr, self.listNewBlocks)
+                        self.comparison_bloks()
+                    if self.listNewCadr[-1]['marker']:
+                        print('Полный оборот')
+                        break
+
+        else: # Если полный оборот не построен, то передаем данные для построения оборота
             inputData = eval(body)
             self.listAllCadr.append(inputData)
             self.find_loop(inputData)
             
     def comparison_bloks(self):
         print('[*] - сравнение блоков')
-        
+        for i in self.listNewBlocks:
+            print(i.start, i.end, i.lmin)
+        for i in self.listBlocks:
+            print(i.start, i.end, i.lmin)
         for i in range(len(self.listNewBlocks)):
             differences = False
-            # for k, j in self.listNewBlocks[i].__dict__.values():
-            #     if 
             if self.listNewBlocks[i].lmax != self.listBlocks[i].lmax:
                 differences = True
             if self.listNewBlocks[i].lmin != self.listBlocks[i].lmin:
@@ -258,7 +224,7 @@ class Lenta:
             if self.listNewBlocks[i].rmin != self.listBlocks[i].rmin:
                 differences = True
             if differences:
-                print('Обнаружены изменения')
+                print('Обнаружены изменения в ', self.listNewBlocks[i])
             else:
                 print('Изменения не обнаружены')
 
@@ -285,7 +251,9 @@ with open("data.json", "r") as read_file:
 
 with open("data.json", "r") as read_file:
     lenta.callback(read_file.read())
-with open("data_copy_2.json", "r") as read_file:
+with open("data_2.json", "r") as read_file:
+    lenta.callback(read_file.read())
+with open("data.json", "r") as read_file:
     lenta.callback(read_file.read())
 
 print('длина ленты', lenta.lenghtLenta)
