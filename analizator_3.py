@@ -18,7 +18,6 @@ class Block:
         self.end = end
         self.cadrs = cadrs
         # self.wracks = wracks
-
         self.lmax = self.cadrs[0]['lmax']
         self.lmin = self.cadrs[0]['lmin']
         self.rmax = self.cadrs[0]['rmax']
@@ -91,7 +90,7 @@ class Lenta:
     def division_blocks(self, listCadr, listBlocks):
         """Метод делит ленту на блоки равного размера."""
         print('[*] - деление на блоки')
-        iBlock = self.iCurrentBlock
+        iBlock = self.iCurrentBlock + 1
         tempList = list()
         for cadr in listCadr:
             if cadr['distance'] < self.lenghtBlock * iBlock:
@@ -209,10 +208,6 @@ class Lenta:
             
     def comparison_bloks(self):
         print('[*] - сравнение блоков')
-        for i in self.listNewBlocks:
-            print(i.start, i.end, i.lmin)
-        for i in self.listBlocks:
-            print(i.start, i.end, i.lmin)
         for i in range(len(self.listNewBlocks)):
             differences = False
             if self.listNewBlocks[i].lmax != self.listBlocks[i].lmax:
@@ -225,6 +220,7 @@ class Lenta:
                 differences = True
             if differences:
                 print('Обнаружены изменения в ', self.listNewBlocks[i])
+                # Запись в БД новой конфигурации
             else:
                 print('Изменения не обнаружены')
 
