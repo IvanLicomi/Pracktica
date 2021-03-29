@@ -41,11 +41,13 @@ class Block:
 class Lenta:
     """"""
 
-    def __init__(self, DBCONFIG: dict, FPS: int, countBlock: int, dMin: int):
+    def __init__(self, DBCONFIG: dict, FPS: int, countBlock: int, dMin: int, approximateLenght: int):
         self.DBCONFIG = DBCONFIG  # Параметры подключения к БД
         self.FPS = 1/FPS  # Количество кадров в секунду камеры
         self.countBlock = countBlock  # Количество болоков на которое будет разделена лента
         self.dMin = dMin
+        self.minLentaLenght = approximateLenght - approximateLenght * 0.2
+        self.maxLentaLenght = approximateLenght + approximateLenght * 0.2
 
         self.listCadr = list()  # Кадры текущего оборота
         self.listNewCadr = list()  # Кадры нового оборота
@@ -62,6 +64,7 @@ class Lenta:
         self.findLoop = False
         self.checkNewCadr = False
 
+        self.distance = 0
         self.iCurrentBlock = 0
         self.iStart = 0
         self.iStartSet = 0
@@ -91,7 +94,6 @@ class Lenta:
         else:
             return CurrentData
     # Сделано
-
     def division_blocks(self, listCadr, listBlocks):
         """Метод делит ленту на блоки равного размера."""
         tempList = list()
@@ -116,70 +118,118 @@ class Lenta:
         return tempList.copy()
     # Сделано
     def find_loop(self, inputData):
-        distance = 0
         print('[*] - построение круга')
         if self.findStartLoop == False:
-            for i in inputData:
-                if inputData[i]['marker']:
-                    self.findStartLoop = True
-                    self.iStart = i
-                    self.iStartSet = len(self.listNewCadr)-1
+            if self.distance == 0:
+                self.listNewCadr.append(inputData[0].copy())
+                self.listNewCadr[0]['distance'] = 0
+
+            if len(self.listNewCadr) == 1:
+                for iCadr in list(inputData)[1:]:
+                    self.listNewCadr.append(inputData[iCadr].copy())
+                    self.listNewCadr[-1]['distance'] = self.distance + self.listNewCadr[-1]['speed'] * self.FPS
+                    self.distance += self.listNewCadr[-1]['speed'] * self.FPS
+            else:
+                for iCadr in inputData:
+                    self.listNewCadr.append(inputData[iCadr].copy())
+                    self.listNewCadr[-1]['distance'] = self.distance + self.listNewCadr[-1]['speed'] * self.FPS
+                    self.distance += self.listNewCadr[-1]['speed'] * self.FPS
+            
+            for iCadr in range(len(self.listNewCadr)):
+                if self.listNewCadr[iCadr]['distance'] >= self.minLentaLenght and self.iStartSet == 0:
+                    self.iStartSet = iCadr
+                if self.listNewCadr[iCadr]['distance'] >= self.maxLentaLenght and self.iEndSet == 0:
+                    self.iEndSet = iCadr
                     break
-        else:
-            for i in inputData:
-                if inputData[i]['marker'] and self.findLoop == False:
-                    print('[*] - круг построен')
-                    self.iEnd = i
-                    self.iEndSet = len(self.listNewCadr)-1
-                    self.findLoop = True
-                    self.listCadr.append(
-                        self.listNewCadr[self.iStartSet][self.iStart])
-                    self.listCadr[0]['distance'] = distance
+            for i in self.listNewCadr[self.iStartSet:self.iEndSet]:
+                print(i)
+            n = 0
+            start = 0
+            for i, cadr in enumerate(self.listNewCadr[self.iStartSet:self.iEndSet]):
+                if (cadr['maxLeft'] == self.listNewCadr[n]['maxLeft'] and cadr['maxRight'] == self.listNewCadr[n]['maxRight'] and 
+                    cadr['minLeft'] == self.listNewCadr[n]['minLeft'] and cadr['minRight'] == self.listNewCadr[n]['minRight']):
+                    print('+', cadr, self.listNewCadr[n])
+                    if n == 0:
+                        start = i
+                    n += 1
+                    print(n, len(self.listNewCadr[self.iStartSet:self.iEndSet]) // 4)
+                    if len(self.listNewCadr[self.iStartSet:self.iEndSet]) // 4 <= n:
+                        print(self.listNewCadr[start+self.iStartSet])
+                        self.lenghtLenta = self.listNewCadr[start+self.iStartSet]['distance']
+                        self.lenghtBlock = self.lenghtLenta / self.countBlock
+                        self.listCadr = self.listNewCadr[:start+self.iStartSet].copy()
+                        self.listNewCadr = self.listNewCadr[start+self.iStartSet+1:]
+                        self.division_blocks(self.listCadr, self.listBlocks)
+                        break
+                else:
+                    print('else')
+                # else:
+                #     print('Не найдено совпадение')
+                #     break
+                # if (i['lmax'] == self.listNewCadr[iCadr]['lmax'] and i['rmax'] == self.listNewCadr[iCadr]['rmax'] and 
+                #     i['lmin'] == self.listNewCadr[iCadr]['lmin'] and i['rmin'] == self.listNewCadr[iCadr]['rmin']):
+                #     print('Найдено совпадение')
+            
+        #         if self.listNewCadr[i]['marker']:
+        #             self.findStartLoop = True
+        #             self.iStart = i
+        #             self.iStartSet = len(self.listNewCadr)-1
+        #             break
+        # else:
+        #     for i in self.listNewCadr:
+        #         if self.listNewCadr[i]['marker'] and self.findLoop == False:
+        #             print('[*] - круг построен')
+        #             self.iEnd = i
+        #             self.iEndSet = len(self.listNewCadr)-1
+        #             self.findLoop = True
+        #             self.listCadr.append(
+        #                 self.listNewCadr[self.iStartSet][self.iStart])
+        #             self.listCadr[0]['distance'] = distance
 
-                    for iSet in range(self.iStartSet, self.iEndSet+1):
-                        if iSet == self.iStartSet:
-                            for iCadr in list(self.listNewCadr[iSet].keys())[self.iStart+1:]:
-                                self.listCadr.append(
-                                    self.listNewCadr[iSet][iCadr])
-                                self.listCadr[-1]['distance'] = distance + \
-                                    self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
-                                distance += self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
-                        else:
-                            for iCadr in self.listNewCadr[iSet]:
-                                self.listCadr.append(
-                                    self.listNewCadr[iSet][iCadr])
-                                self.listCadr[-1]['distance'] = distance + \
-                                    self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
-                                distance += self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
+        #             for iSet in range(self.iStartSet, self.iEndSet+1):
+        #                 if iSet == self.iStartSet:
+        #                     for iCadr in list(self.listNewCadr[iSet].keys())[self.iStart+1:]:
+        #                         self.listCadr.append(
+        #                             self.listNewCadr[iSet][iCadr])
+        #                         self.listCadr[-1]['distance'] = distance + \
+        #                             self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
+        #                         distance += self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
+        #                 else:
+        #                     for iCadr in self.listNewCadr[iSet]:
+        #                         self.listCadr.append(
+        #                             self.listNewCadr[iSet][iCadr])
+        #                         self.listCadr[-1]['distance'] = distance + \
+        #                             self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
+        #                         distance += self.listNewCadr[iSet][iCadr]['speed'] * self.FPS
 
-                                if self.listCadr[-1]['marker']:
-                                    # Деление нового оброта на блоки
-                                    self.lenghtLenta = self.listCadr[-1]['distance']
-                                    self.lenghtBlock = self.lenghtLenta / self.countBlock
-                                    self.division_blocks(
-                                        self.listCadr, self.listBlocks)
-                                    self.iCurrentBlock = 0
-                                    # Обработка оставшихся кадров в наборе
-                                    distance = 0
-                                    tempListCadr = list()
-                                    tempListCadr.append(
-                                        self.listNewCadr[iSet][iCadr].copy())
-                                    tempListCadr[-1]['distance'] = distance
+        #                         if self.listCadr[-1]['marker']:
+        #                             # Деление нового оброта на блоки
+        #                             self.lenghtLenta = self.listCadr[-1]['distance']
+        #                             self.lenghtBlock = self.lenghtLenta / self.countBlock
+        #                             self.division_blocks(
+        #                                 self.listCadr, self.listBlocks)
+        #                             self.iCurrentBlock = 0
+        #                             # Обработка оставшихся кадров в наборе
+        #                             distance = 0
+        #                             tempListCadr = list()
+        #                             tempListCadr.append(
+        #                                 self.listNewCadr[iSet][iCadr].copy())
+        #                             tempListCadr[-1]['distance'] = distance
 
-                                    for iCadrLeft in list(self.listNewCadr[iSet].keys())[iCadr+1:]:
-                                        tempListCadr.append(
-                                            self.listNewCadr[iSet][iCadrLeft])
-                                        tempListCadr[-1]['distance'] = distance + \
-                                            self.listNewCadr[iSet][iCadrLeft]['speed'] * self.FPS
-                                        distance += self.listNewCadr[iSet][iCadrLeft]['speed'] * self.FPS
-                                    print(
-                                        '[*] - Остальные кадры записаны в listNewCadr')
-                                    self.checkNewCadr = False
-                                    self.listNewCadr.clear()
-                                    self.listNewCadr = tempListCadr.copy()
-                                    tempListCadr.clear()
-                                    break
-                    break
+        #                             for iCadrLeft in list(self.listNewCadr[iSet].keys())[iCadr+1:]:
+        #                                 tempListCadr.append(
+        #                                     self.listNewCadr[iSet][iCadrLeft])
+        #                                 tempListCadr[-1]['distance'] = distance + \
+        #                                     self.listNewCadr[iSet][iCadrLeft]['speed'] * self.FPS
+        #                                 distance += self.listNewCadr[iSet][iCadrLeft]['speed'] * self.FPS
+        #                             print(
+        #                                 '[*] - Остальные кадры записаны в listNewCadr')
+        #                             self.checkNewCadr = False
+        #                             self.listNewCadr.clear()
+        #                             self.listNewCadr = tempListCadr.copy()
+        #                             tempListCadr.clear()
+        #                             break
+        #             break
     # Доделать!
 
     def callback(self, body) -> None:
@@ -254,22 +304,22 @@ class Lenta:
                         break
 
                     if self.listNewCadr[-1]['distance'] >= self.lenghtBlock * len(self.listNewBlocks):
+                        if len(self.listNewBlocks) == self.countBlock:
+                            self.comparison_bloks()
                         self.listNewCadr = self.division_blocks(
                             self.listNewCadr, self.listNewBlocks)
                         if len(self.listNewBlocks) > len(self.listBlocks):
-                            print('Что-то нето. Новых блоков больше, чем старых')
+                            print('Что-то нето. Новых блоков больше, чем старых', len(self.listNewBlocks), len(self.listBlocks))
                         else:
                             self.comparison_bloks()
 
         else:  # Если полный оборот не построен, то передаем данные для построения оборота
             inputData = eval(body)
-            self.listNewCadr.append(inputData)
             self.find_loop(inputData)
     # Доделать! Запись в БД.
     #
 
     def comparison_bloks(self):
-        print('[*] - сравнение блоков')
         for i in range(len(self.listNewBlocks)):
             differences = False
             if self.listNewBlocks[i].lmax != self.listBlocks[i].lmax:
@@ -280,8 +330,10 @@ class Lenta:
                 differences = True
             if self.listNewBlocks[i].rmin != self.listBlocks[i].rmin:
                 differences = True
-            if differences:
-                print('Обнаружены изменения в ', self.listNewBlocks[i])
+            
+            # if differences:
+                # return 
+                # print('Обнаружены изменения в ', self.listNewBlocks[i])
                 # Запись в БД новой конфигурации
             # else:
             #     print('Изменения не обнаружены')
@@ -293,28 +345,28 @@ DBCONFIG = {'host': '192.168.1.254',
             'database': 'videoai', }
 
 cs = int(input("Количество блоков: "))
-lenta = Lenta(DBCONFIG, 15, cs, 7)
+lenta = Lenta(DBCONFIG, 1, cs, 7, 86)
 
 # with open("data_copy.json", "r") as read_file:
 #     lenta.callback(read_file.read())
-with open("data.json", "r") as read_file:
+with open("data-test1.json", "r") as read_file:
     lenta.callback(read_file.read())
-with open("data_copy_2.json", "r") as read_file:
+with open("data-test2.json", "r") as read_file:
     lenta.callback(read_file.read())
-with open("data.json", "r") as read_file:
-    lenta.callback(read_file.read())
+# with open("data.json", "r") as read_file:
+#     lenta.callback(read_file.read())
 
 # with open("data_copy_2.json", "r") as read_file:
 #     lenta.callback(read_file.read())
 
-with open("data.json", "r") as read_file:
-    lenta.callback(read_file.read())
-with open("data_2.json", "r") as read_file:
-    lenta.callback(read_file.read())
-with open("data1.json", "r") as read_file:
-    lenta.callback(read_file.read())
-with open("data_2.json", "r") as read_file:
-    lenta.callback(read_file.read())
+# with open("data.json", "r") as read_file:
+#     lenta.callback(read_file.read())
+# with open("data_2.json", "r") as read_file:
+#     lenta.callback(read_file.read())
+# with open("data1.json", "r") as read_file:
+#     lenta.callback(read_file.read())
+# with open("data_2.json", "r") as read_file:
+#     lenta.callback(read_file.read())
 
 print('длина ленты', lenta.lenghtLenta)
 print('длина блока', lenta.lenghtBlock)
