@@ -121,24 +121,21 @@ class Lenta:
     # Доделать! Запись в БД.
     def find_loop(self, inputData):
         print('[*] - построение круга')
-        for i in inputData:
-            inputData[i]['speed'] = 1
-            print(inputData[i])
-
+        for i in inputData: i['speed'] = 1
         if self.findStartLoop == False:
             if self.distance == 0:
-                self.listNewCadr.append(inputData['0'].copy())
+                self.listNewCadr.append(inputData[0].copy())
                 self.listNewCadr[0]['distance'] = 0
 
             if len(self.listNewCadr) == 1:
-                for iCadr in list(inputData)[1:]:
-                    self.listNewCadr.append(inputData[iCadr].copy())
+                for cadr in inputData[1:]:
+                    self.listNewCadr.append(cadr.copy())
                     self.listNewCadr[-1]['distance'] = self.distance + self.listNewCadr[-1]['speed'] * self.FPS
                     self.distance += self.listNewCadr[-1]['speed'] * self.FPS
             else:
                 tempListCadr = list()
-                for iCadr in inputData:
-                    self.listNewCadr.append(inputData[iCadr].copy())
+                for i, cadr in enumerate(inputData):
+                    self.listNewCadr.append(cadr.copy())
                     self.listNewCadr[-1]['distance'] = self.distance + self.listNewCadr[-1]['speed'] * self.FPS
                     self.distance += self.listNewCadr[-1]['speed'] * self.FPS
                     if self.listNewCadr[-1]['distance'] >= self.minLentaLenght and self.findMin == False:
@@ -147,18 +144,20 @@ class Lenta:
                     if self.listNewCadr[-1]['distance'] >= self.maxLentaLenght and self.findMax == False:
                         self.iEndSet = len(self.listNewCadr)-1
                         self.findMax = True
-                        tempListCadr = list(inputData.values())[iCadr:]
+                        tempListCadr = inputData[i:]
                         break
             n = 0
             start = 0
             if self.findMax:
+                self.findMin = False
+                self.findMax = False
                 for i, cadr in enumerate(self.listNewCadr[self.iStartSet:self.iEndSet]):
-                    if (cadr['maxLeft'] == self.listNewCadr[n]['maxLeft'] and cadr['maxRight'] == self.listNewCadr[n]['maxRight'] and 
-                        cadr['minLeft'] == self.listNewCadr[n]['minLeft'] and cadr['minRight'] == self.listNewCadr[n]['minRight']):
+                    if (cadr['wc'][1] == self.listNewCadr[n]['wc'][1] and cadr['lr'][1] == self.listNewCadr[n]['lr'][1] and 
+                        cadr['rr'][1] == self.listNewCadr[n]['rr'][1]):
                         if n == 0: start = i
                         n += 1
-                        print('+')
-                        if len(self.listNewCadr[self.iStartSet:self.iEndSet]) // 4 <= n:
+                        print('+', n, '/', len(self.listNewCadr[self.iStartSet:self.iEndSet]) // 2)
+                        if len(self.listNewCadr[self.iStartSet:self.iEndSet]) // 2 <= n:
                             self.lenghtLenta = self.listNewCadr[start+self.iStartSet]['distance']
                             self.lenghtBlock = self.lenghtLenta / self.countBlock
                             self.listCadr = self.listNewCadr[:start+self.iStartSet+1]
@@ -167,119 +166,141 @@ class Lenta:
                             for n in self.listNewCadr: n.pop('distance', None)
                             self.iCurrentBlock = 0
                             self.findLoop = True
+                            print('Круг построен')
+                            print('длина ленты', self.lenghtLenta)
+                            print('длина блока', self.lenghtBlock)
                             break
                 # Запись в БД информации о ленте
-                if len(self.listNewCadr) != 0:
-                    self.distance = 0
-                    self.listNewCadr[0]['distance'] = 0
-                    for i in self.listNewCadr[1:]:
-                        i['distance'] = self.distance + i['speed'] * self.FPS
-                        self.distance += i['speed'] * self.FPS
-                    self.listNewCadr = self.division_blocks(self.listNewCadr, self.listNewBlocks)
-                    if self.listNewBlocks:
-                        self.comparison_bloks()
+                if len(self.listBlocks) != 0 and len(self.listNewCadr) != 0:
+                        self.distance = 0
+                        self.listNewCadr[0]['distance'] = 0
+                        for i in self.listNewCadr[1:]:
+                            i['distance'] = self.distance + i['speed'] * self.FPS
+                            self.distance += i['speed'] * self.FPS
+                        self.listNewCadr = self.division_blocks(self.listNewCadr, self.listNewBlocks)
+                        if self.listNewBlocks:
+                            self.comparison_bloks()
+                else:
+                    print('Круг не найден')
+                    self.maxLentaLenght += self.maxLentaLenght - self.minLentaLenght
     # Доделать!                    
-    def callback(self,routing_key, body) -> None:
+    def callback(self, routing_key, body) -> None:
         """Метод сбора данных из пакета пришедшего с RabbitMQ.
            Данные должны приходить в формате JSON.
         """
         if self.findLoop:  # Если полный оборот построен, то обрабатываем данные для последующего сравнения
             print('[*] - сбор данных')
-            inputData = eval(body)
-            inputData = inputData['cords']
-
+            tempData = eval(body)
+            inputData = [{**tempData['points'][i], **tempData['cords'][i]} for i in tempData['points']]
+            for i in inputData: i['speed'] = 1
 
             if self.listNewCadr:
-                distance = self.listNewCadr[-1]['distance']
+                self.distance = self.listNewCadr[-1]['distance']
             else:
-                distance = 0
+                self.distance = 0
 
-            for iCadr in inputData:
-                self.listNewCadr.append(inputData[iCadr])
-                self.listNewCadr[-1]['distance'] = distance + \
-                    inputData[iCadr]['speed'] * self.FPS
-                distance += inputData[iCadr]['speed'] * self.FPS
+            tempListCadr = list()
+            for i, cadr in enumerate(inputData):
+                self.listNewCadr.append(cadr.copy())
+                self.listNewCadr[-1]['distance'] = self.distance + self.listNewCadr[-1]['speed'] * self.FPS
+                self.distance += self.listNewCadr[-1]['speed'] * self.FPS
+                
 
-                if self.listNewCadr[-1]['distance'] >= self.minLentaLenght:
-                    
-                if self.listNewCadr[-1]['distance'] >= self.maxLentaLenght:
+                # Создание нового болка
+                if self.listNewCadr[-1]['distance'] >= self.lenghtBlock * self.iCurrentBlock:
+                    self.listNewCadr = self.division_blocks(self.listNewCadr, self.listNewBlocks)
+                    self.comparison_bloks()
+                    print(len(self.listNewBlocks))
 
+                # Поиск повторения круга
+                if len(self.listNewCadr) != 0:
+                    if self.listNewCadr[-1]['distance'] >= self.minLentaLenght and self.findMin == False:
+                        self.findMin = True
+                    elif self.listNewCadr[-1]['distance'] >= self.maxLentaLenght and self.findMax == False:
+                        self.findMax = True
+                        tempListCadr = inputData[i:]
+                        break
+                else:
+                    if self.listNewBlocks[-1].cadrs[-1]['distance'] >= self.minLentaLenght and self.findMin == False:
+                        self.findMin = True
+                    elif self.listNewBlocks[-1].cadrs[-1]['distance'] >= self.maxLentaLenght and self.findMax == False:
+                        self.findMax = True
+                        tempListCadr = inputData[i:]
+                        break
+                n = 0
+                start = 0
+                if self.findMax:
+                    print('Повторение круга')
+                    self.findMin = False
+                    self.findMax = False
+                    tempList = list()
+                    tempList += self.listNewBlocks[-1].cadrs + self.listNewCadr
 
+                    for i, cadr in enumerate(tempList):
+                        if (cadr['wc'][1] == self.listCadr[n]['wc'][1] and cadr['lr'][1] == self.listCadr[n]['lr'][1] and 
+                            cadr['rr'][1] == self.listCadr[n]['rr'][1] and cadr['minRight'] == self.listCadr[n]['minRight']):
+                            if n == 0: start = i
+                            n += 1
+                            print('+', n, '/', len(tempList) // 2)
+                            if len(tempList) // 2 <= n:
+                                NewlenghtLenta = tempList[start]['distance']
+                                if self.lenghtLenta != NewlenghtLenta: # Доделать
+                                    print('Обнаружено длины. Размер несотвествия:  ', abs(self.lenghtLenta - NewlenghtLenta))
+                                    # Растягивание или сжатие блоков
+                                    if abs(self.lenghtLenta - NewlenghtLenta) < self.lenghtLenta * 0.05:
+                                        change = (NewlenghtLenta - self.lenghtLenta) / 2 / len(self.listCadr)
+                                        print('Погрешность меньше 5%')
 
+                                        for i in range(1, len(self.listCadr[1:])+1):
+                                            x = change * i + change
+                                            self.listCadr[i]['distance'] += x
 
-                    # if self.listNewCadr[-1]['marker']:
-                    #     print('Полный оборот')
-                    #     if self.listNewCadr[-1]['distance'] != self.lenghtLenta:
-                    #         print('Обнаружено несоотвествие длины ленты. Размер несотвествия:  ', abs(
-                    #             self.lenghtLenta - self.listNewCadr[-1]['distance']))
-                    #         # Растягивание или сжатие блоков
-                    #         if abs(self.lenghtLenta - self.listNewCadr[-1]['distance']) < self.lenghtLenta * 0.05:
-                    #             change = (self.listNewCadr[-1]['distance'] - self.lenghtLenta) / 2 / len(self.listCadr)
-                    #             print('Погрешность меньше 5%')
-
-                    #             for i in range(1, len(self.listCadr[1:])+1):
-                    #                 x = change * i + change
-                    #                 self.listCadr[i]['distance'] += x
-
-                    #             self.listBlocks.clear()
-                    #             self.lenghtBlock += (self.listNewCadr[-1]['distance'] - self.lenghtLenta) / 2 / self.countBlock
-                    #             self.lenghtLenta += (self.listNewCadr[-1]['distance'] - self.lenghtLenta) / 2
-                                
-                    #             self.iCurrentBlock = 0
-                    #             self.division_blocks(self.listCadr, self.listBlocks)
-                    #             self.iCurrentBlock = 0
-                    #         else:
-                    #             print('Погрешность больше 5%')
-                    #     else:
-                    #         print('Несоотвествие длины не обнаружено')
-                    #         self.listNewCadr = self.division_blocks(self.listNewCadr, self.listNewBlocks)
-                    #         self.comparison_bloks()
-                    #         tempListCadr = list()
-                    #         tempListCadr.append(inputData[iCadr])
-                    #         tempListCadr[-1]['distance'] = distance
-
-                    #         for i in list(inputData)[iCadr+1:]:
-                    #             tempListCadr.append(inputData[i])
-                    #             tempListCadr[-1]['distance'] = distance + \
-                    #                 inputData[i]['speed'] * self.FPS
-                    #             distance += inputData[i]['speed'] * self.FPS
-
-                    #         self.listNewCadr.clear()
-                    #         self.listNewCadr = tempListCadr.copy()
-                    #         tempListCadr.clear()
-                    #     break
-
-                    # if self.listNewCadr[-1]['distance'] >= self.lenghtBlock * len(self.listNewBlocks):
-                    #     if len(self.listNewBlocks) == self.countBlock:
-                    #         self.comparison_bloks()
-                    #     self.listNewCadr = self.division_blocks(
-                    #         self.listNewCadr, self.listNewBlocks)
-                    #     if len(self.listNewBlocks) > len(self.listBlocks):
-                    #         print('Что-то нето. Новых блоков больше, чем старых', len(self.listNewBlocks), len(self.listBlocks))
-                    #     else:
-                    #         self.comparison_bloks()
+                                        self.listBlocks.clear()
+                                        self.lenghtBlock += (NewlenghtLenta - self.lenghtLenta) / 2 / self.countBlock
+                                        self.lenghtLenta += (NewlenghtLenta - self.lenghtLenta) / 2
+                                        self.iCurrentBlock = 0
+                                        self.division_blocks(self.listCadr, self.listBlocks)
+                                        self.iCurrentBlock = 0
+                                    else:
+                                        print('Погрешность больше 5%')
+                                else: # Доделать
+                                    print('Несоотвествие длины не обнаружено')
+                                    self.comparison_bloks()
+                                    self.listNewBlocks.clear()
+                                    self.listNewCadr = tempList[start:].copy()
+                                    for n in self.listNewCadr: n.pop('distance', None)
+                                    self.iCurrentBlock = 0
+                                    self.findLoop = True
+                                break
+                        else:
+                            print('ffff')
+            # if self.listNewCadr[-1]['distance'] >= self.lenghtBlock * len(self.listNewBlocks):
+            #     self.listNewCadr = self.division_blocks(self.listNewCadr, self.listNewBlocks)
+            #     self.comparison_bloks()
+            # if self.listNewCadr[-1]['marker']:
+            #     print('Полный оборот')
 
         else:  # Если полный оборот не построен, то передаем данные для построения оборота
-            inputData = eval(body)
-            inputData = inputData['cords']
+            tempData = eval(body)
+            inputData = [{**tempData['points'][i], **tempData['cords'][i]} for i in tempData['points']]
             self.find_loop(inputData)
     # Доделать! Запись в БД.
     def comparison_bloks(self):
         print('[*] - Сравнение')
-        start = self.listNewBlocks[0].index
-        end = self.listNewBlocks[-1].index
-        for i, block in enumerate(self.listBlocks[start:end+1]):
-            print(block.cadrs)
-            print(self.listNewBlocks[start+i].cadrs)
-            print('-'*50)
-            if (self.listNewBlocks[start+i].maxLeft != block.maxLeft or 
-                self.listNewBlocks[start+i].minLeft != block.minLeft or
-                self.listNewBlocks[start+i].maxRight != block.maxRight or 
-                self.listNewBlocks[start+i].minRight != block.minRight):
-                print('Обнаружены изменения в ', block.maxLeft, self.listNewBlocks[start+i].maxLeft)
-                block = self.listNewBlocks[start+i]
-        self.listNewBlocks.clear()
-        print(self.listNewBlocks)
+        # print(len(self.listBlocks), len(self.listNewBlocks))
+        # start = self.listNewBlocks[0].index
+        # end = self.listNewBlocks[-1].index
+        # for i, block in enumerate(self.listBlocks[start:end+1]):
+        #     # print(block.cadrs)
+        #     # print(self.listNewBlocks[start+i].cadrs)
+        #     # print('-'*50)
+        #     if (self.listNewBlocks[start+i].maxLeft != block.maxLeft or 
+        #         self.listNewBlocks[start+i].minLeft != block.minLeft or
+        #         self.listNewBlocks[start+i].maxRight != block.maxRight or 
+        #         self.listNewBlocks[start+i].minRight != block.minRight):
+        #         print('Обнаружены изменения в ', block.maxLeft, self.listNewBlocks[start+i].maxLeft)
+        #         block = self.listNewBlocks[start+i]
+        # print(self.listNewBlocks)
                 # Запись в БД новой конфигурации
             # else:
             #     print('Изменения не обнаружены')
@@ -291,26 +312,20 @@ DBCONFIG = {'host': '192.168.1.254',
             'database': 'videoai', }
 
 cs = int(input("Количество блоков: "))
-lenta = Lenta(DBCONFIG, 1, cs, 7, 5000)
-rmq = mq(ip='192.168.1.251', process_name='analizator') 
-rmq.consume(func=lenta.callback, bindings=['calc.data.*']) 
+lenta = Lenta(DBCONFIG, 1, cs, 7, 10)
+# rmq = mq(ip='192.168.1.251', process_name='analizator') 
+# rmq.consume(func=lenta.callback, bindings=['calc.data.*']) 
 
 
-# with open("data-test1.json", "r") as read_file:
-#     lenta.callback(read_file.read())
-# with open("data-test2.json", "r") as read_file:
-#     lenta.callback(read_file.read())
-# with open("data-test1.json", "r") as read_file:
-#     lenta.callback(read_file.read())
-# with open("data-test1.json", "r") as read_file:
-#     lenta.callback(read_file.read())
-# with open("data-test1.json", "r") as read_file:
-#     lenta.callback(read_file.read())
-# with open("data-test1.json", "r") as read_file:
-#     lenta.callback(read_file.read())
-# with open("data-test1.json", "r") as read_file:
-#     lenta.callback(read_file.read())
-
-
-print('длина ленты', lenta.lenghtLenta)
-print('длина блока', lenta.lenghtBlock)
+with open("data-test.json", "r") as read_file:
+    lenta.callback(None, read_file.read())
+with open("data-test.json", "r") as read_file:
+    lenta.callback(None, read_file.read())
+with open("data-test.json", "r") as read_file:
+    lenta.callback(None, read_file.read())
+with open("data-test.json", "r") as read_file:
+    lenta.callback(None, read_file.read())
+with open("data-test.json", "r") as read_file:
+    lenta.callback(None, read_file.read())
+with open("data-test.json", "r") as read_file:
+    lenta.callback(None, read_file.read())
