@@ -186,17 +186,15 @@ class Lenta:
                                 _SQl = """SELECT MAX(`id`) FROM `lenta_conv`"""
                                 self.last_id_conv = cursor.execute(_SQl) 
                                 if self.last_id_conv == None:
-                                    self.last_id_conv == 1
+                                    self.last_id_conv == 0
                                 else:
                                     self.last_id_conv += 1
                                 
-                            for block in self.listBlocks:
-                                print(self.last_id_conv, block.dLeft, block.dRight, block.minWidth, block.maxWidth)
-                                with UseDatabase(self.DBCONFIG) as cursor:
-                                    _SQl = """INSERT INTO lenta_blocks(id_conv, dLeft, dRight, minWidth, maxWidth)
-                                            VALUES (%s, %s, %s, %s, %s)"""
-                                    cursor.execute(_SQl, (self.last_id_conv, block.dLeft, block.dRight, block.minWidth, block.maxWidth))  
-                                        
+                                for block in self.listBlocks:
+                                    with UseDatabase(self.DBCONFIG) as cursor:
+                                        _SQl = """INSERT INTO lenta_blocks(id_conv, dLeft, dRight, minWidth, maxWidth)
+                                                VALUES (%s, %s, %s, %s, %s)"""
+                                        cursor.execute(_SQl, (self.last_id_conv, block.dLeft, block.dRight, block.minWidth, block.maxWidth))  
                             break
 
                 if len(self.listBlocks) != 0 and len(self.listNewCadr) != 0:
