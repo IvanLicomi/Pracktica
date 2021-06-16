@@ -1,0 +1,5 @@
+DBCONFIG = {'host': '192.168.1.251',
+
+	'user': 'user',
+	'password': '0011',
+	'database': 'videoai', }
